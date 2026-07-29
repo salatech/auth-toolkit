@@ -1,0 +1,95 @@
+{
+  "name": "@salatech/auth-toolkit",
+  "version": "0.1.0",
+  "description": "Unified OTP, deep-link, and biometric auth toolkit for React Native and Expo apps",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.mjs",
+      "require": "./dist/core/index.js"
+    },
+    "./otp": {
+      "types": "./dist/otp/index.d.ts",
+      "import": "./dist/otp/index.mjs",
+      "require": "./dist/otp/index.js"
+    },
+    "./deep-link": {
+      "types": "./dist/deep-link/index.d.ts",
+      "import": "./dist/deep-link/index.mjs",
+      "require": "./dist/deep-link/index.js"
+    },
+    "./biometric": {
+      "types": "./dist/biometric/index.d.ts",
+      "import": "./dist/biometric/index.mjs",
+      "require": "./dist/biometric/index.js"
+    },
+    "./hooks": {
+      "types": "./dist/hooks/index.d.ts",
+      "import": "./dist/hooks/index.mjs",
+      "require": "./dist/hooks/index.js"
+    },
+    "./ui": {
+      "types": "./dist/ui/index.d.ts",
+      "import": "./dist/ui/index.mjs",
+      "require": "./dist/ui/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "auth",
+    "otp",
+    "deep-link",
+    "magic-link",
+    "biometric",
+    "faceid",
+    "fingerprint"
+  ],
+  "author": "Salatech",
+  "license": "MIT",
+  "devDependencies": {
+    "@testing-library/react": "^14.2.0",
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.0",
+    "jsdom": "^24.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsup": "^8.0.2",
+    "typescript": "^5.4.0",
+    "vitest": "^1.5.0"
+  },
+  "peerDependencies": {
+    "expo-linking": ">=6.0.0",
+    "expo-local-authentication": ">=14.0.0",
+    "react": ">=17.0.0",
+    "react-native": ">=0.70.0"
+  },
+  "peerDependenciesMeta": {
+    "expo-linking": {
+      "optional": true
+    },
+    "expo-local-authentication": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    }
+  }
+}
