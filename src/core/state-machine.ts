@@ -4,6 +4,9 @@ import {
   AuthStateMachineListener,
 } from './types';
 
+/**
+ * Initial authentication state on machine instantiation or after a reset.
+ */
 export const INITIAL_AUTH_STATE: AuthState = {
   status: 'idle',
   data: null,
@@ -12,6 +15,19 @@ export const INITIAL_AUTH_STATE: AuthState = {
   lastUpdated: Date.now(),
 };
 
+/**
+ * Pure state transition reducer for the authentication state machine.
+ * Enforces valid transition guards across all status × action combinations.
+ *
+ * @param state - Current authentication state snapshot.
+ * @param action - Dispatched action.
+ * @returns Next immutable state snapshot.
+ *
+ * @example
+ * ```ts
+ * const next = authReducer(currentState, { type: 'SEND_CODE' });
+ * ```
+ */
 export function authReducer<TData = unknown, TError = Error>(
   state: AuthState<TData, TError>,
   action: AuthAction<TData, TError>
@@ -117,10 +133,27 @@ export function authReducer<TData = unknown, TError = Error>(
   }
 }
 
+/**
+ * Framework-agnostic state container managing authentication flow transitions.
+ *
+ * @template TData - Type of authenticated payload (e.g. JWT token or user profile).
+ * @template TError - Type of error (defaults to `Error`).
+ *
+ * @example
+ * ```ts
+ * const machine = new AuthStateMachine<string>();
+ * const unsubscribe = machine.subscribe((state) => console.log(state.status));
+ * machine.dispatch({ type: 'SEND_CODE' });
+ * ```
+ */
 export class AuthStateMachine<TData = unknown, TError = Error> {
   private state: AuthState<TData, TError>;
   private listeners: Set<AuthStateMachineListener<TData, TError>> = new Set();
 
+  /**
+   * Initializes a new state machine instance.
+   * @param initialState - Optional partial state overrides for testing or hydration.
+   */
   constructor(initialState?: Partial<AuthState<TData, TError>>) {
     this.state = {
       ...(INITIAL_AUTH_STATE as AuthState<TData, TError>),
@@ -128,10 +161,18 @@ export class AuthStateMachine<TData = unknown, TError = Error> {
     };
   }
 
+  /**
+   * Returns the current state snapshot.
+   */
   public getState(): AuthState<TData, TError> {
     return this.state;
   }
 
+  /**
+   * Dispatches an action through `authReducer`, updating state and notifying subscribers.
+   * @param action - Action to dispatch.
+   * @returns Updated state snapshot.
+   */
   public dispatch(action: AuthAction<TData, TError>): AuthState<TData, TError> {
     const nextState = authReducer(this.state, action);
     this.state = nextState;
@@ -139,6 +180,11 @@ export class AuthStateMachine<TData = unknown, TError = Error> {
     return this.state;
   }
 
+  /**
+   * Subscribes a listener to state changes.
+   * @param listener - Callback receiving the updated state snapshot.
+   * @returns Cleanup function to unsubscribe the listener.
+   */
   public subscribe(listener: AuthStateMachineListener<TData, TError>): () => void {
     this.listeners.add(listener);
     return () => {

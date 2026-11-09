@@ -1,10 +1,15 @@
 import { AuthError } from '../core/types';
 
+/**
+ * Expected shape of the lazy-loaded `expo-linking` module.
+ */
 export type ExpoLinkingModule = {
+  /** Parses a deep link URL into an object containing path and query parameters. */
   parse: (url: string) => {
     path?: string | null;
     queryParams?: Record<string, string | string[] | undefined>;
   };
+  /** Subscribes to incoming URL events. */
   addEventListener: (
     event: 'url',
     callback: (event: { url: string }) => void
@@ -18,6 +23,10 @@ export function __setExpoLinkingForTests(module: ExpoLinkingModule | null): void
   linkingOverride = module;
 }
 
+/**
+ * Lazily loads the `expo-linking` peer dependency at runtime.
+ * Throws a helpful `AuthError` with instructions to install if not present.
+ */
 export function loadExpoLinking(): ExpoLinkingModule {
   if (linkingOverride) {
     return linkingOverride;

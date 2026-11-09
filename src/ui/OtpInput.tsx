@@ -6,19 +6,47 @@ import {
   onlyDigits,
 } from './otp-input-logic';
 
+/**
+ * Props for the Web `OtpInput` component.
+ */
 export interface OtpInputProps {
+  /** Number of individual digit boxes. Defaults to 6. */
   length?: number;
+  /** Current string value of the OTP input. */
   value: string;
+  /** Callback fired whenever digits are entered, edited, or cleared. */
   onChange: (value: string) => void;
+  /** Callback fired automatically once all digits are filled. */
   onComplete?: (code: string) => void;
+  /** Disables all digit input fields. Defaults to false. */
   disabled?: boolean;
+  /** Automatically focuses the first empty digit box on mount. Defaults to true. */
   autoFocus?: boolean;
-  /** Called when the user edits digits — wire to `clearError()` from `useAuthFlow`. */
+  /** Callback fired when the user starts typing/editing — connect to `clearError()` to dismiss retryable errors. */
   onEditStart?: () => void;
+  /** Custom CSS styles for the flex container wrapping the inputs. */
   containerStyle?: React.CSSProperties;
+  /** Custom CSS styles applied to each digit input box. */
   inputStyle?: React.CSSProperties;
 }
 
+/**
+ * Headless multi-box numeric OTP input component for React Web applications.
+ *
+ * Supports single-digit auto-advancing, Backspace backward navigation, full-code paste,
+ * arrow keys, and mobile SMS auto-fill suggestions.
+ *
+ * @example
+ * ```tsx
+ * <OtpInput
+ *   length={6}
+ *   value={code}
+ *   onChange={setCode}
+ *   onComplete={(fullCode) => verifyOtp(fullCode)}
+ *   onEditStart={clearError}
+ * />
+ * ```
+ */
 export const OtpInput: React.FC<OtpInputProps> = ({
   length = 6,
   value,

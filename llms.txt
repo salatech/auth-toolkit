@@ -1,0 +1,80 @@
+# @salatech/auth-toolkit
+
+Unified headless authentication toolkit for React Native, Expo, and React Web.
+Provides state-machine-backed OTP flows, deep/magic link parsing, device biometrics, and headless multi-digit inputs.
+
+## Canonical Imports
+Always import from the package root:
+```ts
+import {
+  useOtpLogin,
+  useAuthFlow,
+  OtpInput,        // Web (DOM inputs)
+  OtpInputNative,  // React Native (TextInput)
+  AuthStateMachine,
+  OtpManager,
+  AuthError,
+  parseAuthDeepLink,
+  addDeepLinkListener,
+  isBiometricAvailable,
+  authenticateBiometric,
+} from '@salatech/auth-toolkit';
+```
+(Subpaths like `@salatech/auth-toolkit/core` exist for specialized bundle optimization, but root import is standard.)
+
+## 10-Line Quick Start (OTP Login)
+```tsx
+import { useState } from 'react';
+import { View, Button, TextInput } from 'react-native';
+import { useOtpLogin, OtpInputNative } from '@salatech/auth-toolkit';
+
+export function Login() {
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
+  const { status, error, resendIn, sendOtp, verifyOtp, clearError, reset } = useOtpLogin({
+    onSendOtp: async (to) => { await api.sendOtp(to); },
+    onVerifyOtp: async (c) => { return (await api.verify(phone, c)).token; },
+    onVerified: (token) => { router.replace('/home'); },
+  });
+
+  if (status === 'idle') return <Button title="Send Code" onPress={() => sendOtp(phone)} />;
+  if (status === 'pending') return (
+    <View>
+      <OtpInputNative value={code} onChange={setCode} onEditStart={clearError} onComplete={verifyOtp} />
+      <Button title={resendIn > 0 ? `Resend (${resendIn}s)` : 'Resend'} disabled={resendIn > 0} onPress={() => sendOtp(phone)} />
+    </View>
+  );
+  return <Button title="Reset" onPress={reset} />;
+}
+```
+
+## State Machine Lifecycle (In Words)
+The authentication state follows a deterministic finite state machine (`AuthStateMachine` / `authReducer`):
+- `idle`: Initial state. Calling `sendOtp()` dispatches `SEND_CODE` -> transitions to `sending`.
+- `sending`: Code is dispatching to the carrier. On success, dispatches `CODE_SENT` -> transitions to `pending`.
+- `pending`: Awaiting user input. Calling `verifyOtp()` dispatches `VERIFY_CODE` -> transitions to `verifying`.
+- `verifying`: Validating code with server.
+  - On success: dispatches `VERIFY_SUCCESS` -> transitions to `success` with session token payload in `state.data`.
+  - On wrong code: dispatches `VERIFY_FAILURE` -> transitions back to `pending` with `state.error` set. The user can retry without starting over.
+  - While `pending`, typing dispatches `CLEAR_ERROR` -> clears `state.error` while keeping `status: 'pending'`.
+- `error`: Terminal failure (e.g. fatal network crash). Dispatched via `SET_ERROR`. Exits via `RESET`.
+- `reset`: Calling `reset()` dispatches `RESET` from any state -> returns to `idle`.
+- Direct login: Deep links (`handleDeepLink`) and biometrics (`authenticateWithBiometrics`) can transition directly to `success` from `idle` or `pending`.
+
+## Common Mistakes & How to Avoid Them
+1. Forgetting Peer Dependencies:
+   `expo-linking`, `expo-local-authentication`, and `react-native` are optional peer dependencies.
+   - For deep links: run `npx expo install expo-linking`.
+   - For biometrics: run `npx expo install expo-local-authentication`.
+   - For web apps: use `OtpInput` instead of `OtpInputNative` (no `react-native` required).
+2. Treating Biometrics as a Server Session Token:
+   Local biometric authentication only verifies device unlock; it does not produce a server session token.
+   Provide `onBiometricSuccess: async () => fetchServerSession()` to mint a valid session token.
+   If omitted, no token is minted and `state.data` is `null`.
+3. Misunderstanding Retryable Verification Failures:
+   When `verifyOtp()` fails, `status` remains `'pending'` (it does NOT become `'error'`).
+   Wire `onEditStart={clearError}` on your `OtpInput`/`OtpInputNative` so the error message clears when the user types.
+4. Calling `sendOtp()` during Cooldown:
+   `sendOtp()` is a no-op while `resendIn > 0`. Disable your resend button when `resendIn > 0`.
+5. Double Submissions:
+   The library automatically guards `sendOtp` and `verifyOtp` against duplicate concurrent submissions while requests are in flight.

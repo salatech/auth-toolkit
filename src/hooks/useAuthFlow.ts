@@ -5,34 +5,69 @@ import { AuthError, AuthState, AuthStatus } from '../core/types';
 import { parseAuthDeepLink } from '../deep-link';
 import { OtpManager } from '../otp';
 
+/**
+ * Allowed authentication methods.
+ *
+ * - `'otp'`: Restricts authentication to One-Time Password send and verify.
+ * - `'deep-link'`: Restricts authentication to URL / magic-link parameter parsing.
+ * - `'biometric'`: Restricts authentication to local biometric hardware checks.
+ * - `'hybrid'`: Allows all authentication methods concurrently (default).
+ */
 export type AuthStrategy = 'otp' | 'deep-link' | 'biometric' | 'hybrid';
 
+/**
+ * Options configuring the `useAuthFlow` hook.
+ *
+ * @template TToken - Type of authenticated payload returned upon verification.
+ */
 export interface UseAuthFlowOptions<TToken = string> {
+  /** Strategy restricting which auth methods are enabled. Defaults to `'hybrid'`. */
   strategy?: AuthStrategy;
+  /** Cooldown in seconds before a resend is permitted. Defaults to 60. */
   cooldownSeconds?: number;
+  /** Expected digit count for OTP code. Defaults to 6. */
   codeLength?: number;
+  /** URL query parameter name for magic links. Defaults to `'token'`. */
   tokenParamName?: string;
+  /** Async callback invoked to dispatch an OTP code. */
   onSendOtp?: (recipient: string) => Promise<void>;
+  /** Async callback invoked to verify a submitted OTP code. */
   onVerifyOtp?: (code: string) => Promise<TToken>;
   /**
-   * Called after biometric hardware auth succeeds. Return a session token when available.
-   * If omitted, no token is minted, state.data is null, and onVerified is called without a token.
+   * Called after hardware biometric authentication succeeds.
+   * Return a session token when available to store in `state.data`.
+   * If omitted, no token is minted, `state.data` is `null`, and `onVerified` is called without arguments.
    */
   onBiometricSuccess?: () => Promise<TToken> | TToken;
+  /** Callback fired whenever authentication completes successfully. */
   onVerified?: (token?: TToken) => void;
+  /** Callback fired whenever an operation errors. */
   onError?: (error: Error) => void;
 }
 
+/**
+ * Return value of the `useAuthFlow` hook.
+ *
+ * @template TToken - Type of authenticated payload.
+ */
 export interface UseAuthFlowReturn<TToken = string> {
+  /** Current state machine status ('idle' | 'sending' | 'pending' | 'verifying' | 'success' | 'error'). */
   status: AuthStatus;
+  /** Full immutable state snapshot. */
   state: AuthState<TToken, Error>;
+  /** Seconds remaining on resend cooldown. */
   resendIn: number;
+  /** Dispatches an OTP to the given recipient. */
   sendOtp: (recipient: string) => Promise<void>;
+  /** Verifies a submitted OTP code against onVerifyOtp. */
   verifyOtp: (code: string) => Promise<void>;
+  /** Parses an incoming deep link URL and verifies the token. */
   handleDeepLink: (url: string) => void;
+  /** Prompts native biometric authentication. */
   authenticateWithBiometrics: (options?: BiometricOptions) => Promise<boolean>;
   /** Clears a retryable error while status is `pending` (e.g. after failed OTP verify). */
   clearError: () => void;
+  /** Resets state back to 'idle'. */
   reset: () => void;
 }
 
@@ -54,6 +89,23 @@ function warnUnsupported(feature: string, strategy: AuthStrategy): void {
   }
 }
 
+/**
+ * Full-featured authentication orchestration hook for React Native, Expo, and React Web.
+ * Unifies OTP verification, deep/magic links, and biometrics into a deterministic state machine.
+ *
+ * @template TToken - Type of session token or user payload.
+ * @param options - Configuration and handler callbacks.
+ * @returns State and action dispatchers.
+ *
+ * @example
+ * ```tsx
+ * const { status, state, resendIn, sendOtp, verifyOtp, authenticateWithBiometrics } = useAuthFlow({
+ *   onSendOtp: async (phone) => api.sendOtp(phone),
+ *   onVerifyOtp: async (code) => api.verifyOtp(code),
+ *   onVerified: (token) => console.log('Authenticated:', token),
+ * });
+ * ```
+ */
 export function useAuthFlow<TToken = string>(
   options: UseAuthFlowOptions<TToken> = {}
 ): UseAuthFlowReturn<TToken> {

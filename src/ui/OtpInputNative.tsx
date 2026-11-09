@@ -43,19 +43,47 @@ function loadReactNative(): ReactNativeComponents {
   }
 }
 
+/**
+ * Props for the React Native / Expo `OtpInputNative` component.
+ */
 export interface OtpInputNativeProps {
+  /** Number of individual digit boxes. Defaults to 6. */
   length?: number;
+  /** Current string value of the OTP input. */
   value: string;
+  /** Callback fired whenever digits are entered, edited, or cleared. */
   onChange: (value: string) => void;
+  /** Callback fired automatically once all digits are filled. */
   onComplete?: (code: string) => void;
+  /** Disables all digit input fields. Defaults to false. */
   disabled?: boolean;
+  /** Automatically focuses the first empty digit box on mount. Defaults to true. */
   autoFocus?: boolean;
-  /** Called when the user edits digits — wire to `clearError()` from `useAuthFlow`. */
+  /** Callback fired when the user starts typing/editing — connect to `clearError()` to dismiss retryable errors. */
   onEditStart?: () => void;
+  /** Custom style object or array applied to the View container wrapping the inputs. */
   containerStyle?: object;
+  /** Custom style object or array applied to each TextInput box. */
   inputStyle?: object;
 }
 
+/**
+ * Headless multi-box numeric OTP input component for React Native and Expo applications.
+ *
+ * Utilizes native `TextInput` with auto-focus advancing, hardware/software backspace handling,
+ * and SMS OTP auto-fill via `textContentType="oneTimeCode"` and `autoComplete="sms-otp"`.
+ *
+ * @example
+ * ```tsx
+ * <OtpInputNative
+ *   length={6}
+ *   value={code}
+ *   onChange={setCode}
+ *   onComplete={(fullCode) => verifyOtp(fullCode)}
+ *   onEditStart={clearError}
+ * />
+ * ```
+ */
 export const OtpInputNative: React.FC<OtpInputNativeProps> = ({
   length = 6,
   value,

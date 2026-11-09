@@ -1,20 +1,38 @@
 import { AuthError } from '../core/types';
 
+/**
+ * Options configuring the native biometric authentication prompt.
+ */
 export interface BiometricOptions {
+  /** Title or message displayed on the native biometric dialog. Defaults to `'Authenticate to continue'`. */
   promptMessage?: string;
+  /** Label for the cancel button. Defaults to `'Cancel'`. */
   cancelLabel?: string;
+  /** Label for the passcode fallback button. Defaults to `'Use Passcode'`. */
   fallbackLabel?: string;
+  /** When true, prevents the user from falling back to entering device PIN/passcode. Defaults to false. */
   disableDeviceFallback?: boolean;
 }
 
+/**
+ * Result returned from a biometric verification attempt.
+ */
 export interface BiometricResult {
+  /** Whether the user successfully authenticated. */
   success: boolean;
+  /** Error message if authentication failed or was cancelled. */
   error?: string;
 }
 
+/**
+ * Expected shape of the lazy-loaded `expo-local-authentication` module.
+ */
 export interface ExpoLocalAuthenticationModule {
+  /** Checks if biometric hardware exists on the device. */
   hasHardwareAsync: () => Promise<boolean>;
+  /** Checks if the user has enrolled biometrics (Face ID, Touch ID, Fingerprint). */
   isEnrolledAsync: () => Promise<boolean>;
+  /** Prompts the native biometric authentication dialog. */
   authenticateAsync: (options?: {
     promptMessage?: string;
     cancelLabel?: string;
@@ -48,6 +66,19 @@ function getExpoLocalAuthentication(): ExpoLocalAuthenticationModule {
   }
 }
 
+/**
+ * Determines whether biometric hardware is present and user credentials are enrolled on the device.
+ *
+ * @returns Resolves to `true` if Face ID, Touch ID, or Android Biometric Prompt is ready.
+ *
+ * @example
+ * ```ts
+ * const available = await isBiometricAvailable();
+ * if (available) {
+ *   // Show "Sign in with Face ID" button
+ * }
+ * ```
+ */
 export async function isBiometricAvailable(): Promise<boolean> {
   const LocalAuth = getExpoLocalAuthentication();
   const hasHardware = await LocalAuth.hasHardwareAsync();
@@ -55,6 +86,20 @@ export async function isBiometricAvailable(): Promise<boolean> {
   return hasHardware && isEnrolled;
 }
 
+/**
+ * Prompts the native biometric authentication dialog (Face ID, Touch ID, Android Biometrics).
+ *
+ * @param options - Custom prompt titles and button labels.
+ * @returns Object with `success: true` on authentication, or `success: false` with error message.
+ *
+ * @example
+ * ```ts
+ * const result = await authenticateBiometric({ promptMessage: 'Log into MyApp' });
+ * if (result.success) {
+ *   console.log('Biometric unlocked');
+ * }
+ * ```
+ */
 export async function authenticateBiometric(
   options: BiometricOptions = {}
 ): Promise<BiometricResult> {

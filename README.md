@@ -1,25 +1,12 @@
 # `@salatech/auth-toolkit`
 
-A unified, framework-agnostic authentication toolkit designed for React Native and Expo applications, with full compatibility for React web environments. It provides structured state management and headless utilities for One-Time Password (OTP) code delivery, deep-link and magic-link URL parsing, and device biometric authentication.
-
----
-
-## Key Features
-
-- Framework-Agnostic Core: Built on a lightweight, zero-dependency state machine (`AuthStateMachine`) that operates independently of React Native UI libraries.
-- OTP Lifecycle Management: Manages code dispatching, validation against customizable numeric length criteria, and automatic resend cooldown timers.
-- Deep-Link and Magic-Link Handling: Parses incoming authentication URLs and extracts security tokens using lazy-loaded `expo-linking`.
-- Biometric Authentication Abstraction: Provides hardware availability checks and native Face ID / Fingerprint prompting via lazy-loaded `expo-local-authentication`.
-- Unified React Integration: Exposes the `useAuthFlow` hook to connect OTP dispatching, deep links, biometrics, and timer tickers into a consolidated interface.
-- Headless UI Components: Includes unstyled `OtpInput` (web) and `OtpInputNative` (React Native) for multi-digit PIN entry.
-- Subpath Exports: Import only what you need (`@salatech/auth-toolkit/core`, `/hooks`, `/ui`, etc.) for smaller bundles.
-- Full TypeScript Support: Shipped with strict TypeScript declarations (`.d.ts`) alongside dual CommonJS (CJS) and ES Module (ESM) builds.
+A unified, framework-agnostic authentication toolkit designed for React Native and Expo applications, with full compatibility for React web. Built on a lightweight, zero-dependency state machine, it provides headless utilities and hooks for One-Time Password (OTP) code delivery, deep-link / magic-link token parsing, and native biometric authentication.
 
 ---
 
 ## Installation
 
-Install the core package using your preferred package manager:
+Install the package using your preferred package manager:
 
 ```bash
 npm install @salatech/auth-toolkit
@@ -27,101 +14,71 @@ npm install @salatech/auth-toolkit
 
 ### Optional Peer Dependencies
 
-Depending on the authentication strategies required by your application, install the corresponding peer dependencies. Core state machine and OTP utilities do not require peer dependencies.
+Core state machine, OTP utilities, and web components require **zero external dependencies**. Install peer dependencies only for the native features you use:
 
 #### Deep-Link / Magic-Link Support
 Required for link listener utilities and automatic URL token parsing:
-
 ```bash
 npx expo install expo-linking
 ```
 
 #### Biometric Authentication Support
-Required for Face ID, Touch ID, and Android Biometric Prompt functionality:
-
+Required for Face ID, Touch ID, and Android Biometric Prompt:
 ```bash
 npx expo install expo-local-authentication
 ```
 
----
-
-## Subpath Imports
-
-Tree-shake by importing only the module you need:
-
-```typescript
-import { AuthStateMachine } from '@salatech/auth-toolkit/core';
-import { OtpManager } from '@salatech/auth-toolkit/otp';
-import { useAuthFlow } from '@salatech/auth-toolkit/hooks';
-import { OtpInputNative } from '@salatech/auth-toolkit/ui';
-import { parseAuthDeepLink } from '@salatech/auth-toolkit/deep-link';
-import { authenticateBiometric } from '@salatech/auth-toolkit/biometric';
+#### React Native UI Input
+Required only if rendering `OtpInputNative` (web apps use `OtpInput` with zero native dependencies):
+```bash
+npx expo install react-native
 ```
 
 ---
 
-## Core Architecture
+## 10-Line Quick Start (`useOtpLogin`)
 
-The architecture of `@salatech/auth-toolkit` is divided into isolated, decoupled modules:
-
-```
-@salatech/auth-toolkit
-├── src/
-│   ├── core/         Framework-agnostic state machine, types, and reducer
-│   ├── otp/          OTP validation and cooldown timer manager
-│   ├── deep-link/    URL parsing and deep link listener wrappers
-│   ├── biometric/    Biometric hardware verification and prompt handler
-│   ├── hooks/        Unified useAuthFlow() React hook
-│   └── ui/           Headless OtpInput component
-```
-
-### State Machine Lifecycle
-
-Authentication status transitions follow a deterministic state machine managed by `authReducer`:
-
-```
-               +-----------------------------------+
-               |                                   |
-               v                                   |
-            [ idle ]                               |
-               |                                   |
-           SEND_CODE                               |
-               |                                   |
-               v                                   |
-          [ sending ]                              |
-               |                                   |
-           CODE_SENT                               |
-               |                                   |
-               v                                   |
-          [ pending ] <---------------+            |
-               |                      |            |
-          VERIFY_CODE                 |            |
-               |                 VERIFY_FAILURE    |
-               v                      |            |
-         [ verifying ] ---------------+            |
-            |      |                               |
-VERIFY_SUCCESS    SET_ERROR                        |
-      |            |                               |
-      v            v                               RESET
-  [ success ]   [ error ] -------------------------+
-```
-
----
-
-## Usage Examples
-
-### 1. Unified Authentication Hook (`useAuthFlow`)
-
-The `useAuthFlow` hook orchestrates state management, timer updates, and async handlers into a single React hook.
+For 90% of use cases (sending an OTP code, entering it, and logging in), use `useOtpLogin`:
 
 ```tsx
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { View, Button, TextInput } from 'react-native';
+import { useOtpLogin, OtpInputNative } from '@salatech/auth-toolkit';
+
+export function LoginScreen() {
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
+  const { status, error, resendIn, sendOtp, verifyOtp, clearError, reset } = useOtpLogin({
+    onSendOtp: async (recipient) => { await api.sendOtp(recipient); },
+    onVerifyOtp: async (submittedCode) => { return (await api.verify(phone, submittedCode)).token; },
+    onVerified: (token) => { router.replace('/dashboard'); },
+  });
+
+  if (status === 'idle') return <Button title="Send Code" onPress={() => sendOtp(phone)} />;
+  if (status === 'pending' || status === 'verifying') return (
+    <View>
+      <OtpInputNative value={code} onChange={setCode} onEditStart={clearError} onComplete={verifyOtp} />
+      <Button title={resendIn > 0 ? `Resend (${resendIn}s)` : 'Resend'} disabled={resendIn > 0} onPress={() => sendOtp(phone)} />
+    </View>
+  );
+  return <Button title="Reset" onPress={reset} />;
+}
+```
+
+---
+
+## Full Example (`useAuthFlow`)
+
+For advanced authentication orchestration supporting hybrid OTP, magic links, and Face ID:
+
+```tsx
+import { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet } from 'react-native';
 import { useAuthFlow, OtpInputNative } from '@salatech/auth-toolkit';
 
-export function LoginScreen() {
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [otpCode, setOtpCode] = useState('');
+export function AdvancedAuthScreen() {
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
 
   const {
     status,
@@ -133,7 +90,7 @@ export function LoginScreen() {
     authenticateWithBiometrics,
     reset,
   } = useAuthFlow({
-    strategy: 'otp',
+    strategy: 'hybrid', // 'otp' | 'deep-link' | 'biometric' | 'hybrid'
     cooldownSeconds: 60,
     codeLength: 6,
     onSendOtp: async (recipient) => {
@@ -143,23 +100,27 @@ export function LoginScreen() {
         body: JSON.stringify({ phone: recipient }),
       });
     },
-    onVerifyOtp: async (code) => {
-      const response = await fetch('/api/auth/verify-otp', {
+    onVerifyOtp: async (submittedCode) => {
+      const res = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phoneNumber, code }),
+        body: JSON.stringify({ phone, code: submittedCode }),
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Verification failed');
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Verification failed');
+      return data.accessToken;
+    },
+    onBiometricSuccess: async () => {
+      // Exchange biometric confirmation for a server session token:
+      const res = await fetch('/api/auth/biometric-login', { method: 'POST' });
+      const data = await res.json();
       return data.accessToken;
     },
     onVerified: (token) => {
       console.log('Successfully authenticated. Token:', token);
     },
-    onError: (error) => {
-      console.error('Authentication error:', error.message);
+    onError: (err) => {
+      console.error('Auth error:', err.message);
     },
   });
 
@@ -170,63 +131,52 @@ export function LoginScreen() {
           <Text style={styles.label}>Phone Number</Text>
           <TextInput
             style={styles.input}
-            value={phoneNumber}
-            onChangeText={setPhoneNumber}
+            value={phone}
+            onChangeText={setPhone}
             placeholder="+1234567890"
             keyboardType="phone-pad"
           />
+          <Button title="Send Code" onPress={() => sendOtp(phone)} />
           <Button
-            title="Send Verification Code"
-            onPress={() => sendOtp(phoneNumber)}
+            title="Sign in with Face ID"
+            onPress={() => authenticateWithBiometrics({ promptMessage: 'Unlock MyApp' })}
           />
         </View>
       )}
 
       {(status === 'pending' || status === 'verifying') && (
         <View>
-          <Text style={styles.label}>Enter Code</Text>
-          {state.error && (
-            <Text style={styles.errorText}>{state.error.message}</Text>
-          )}
+          <Text style={styles.label}>Enter 6-Digit Code</Text>
+          {state.error && <Text style={styles.errorText}>{state.error.message}</Text>}
           <OtpInputNative
             length={6}
-            value={otpCode}
-            onChange={setOtpCode}
+            value={code}
+            onChange={setCode}
             onEditStart={clearError}
-            onComplete={(code) => verifyOtp(code)}
+            onComplete={(c) => verifyOtp(c)}
           />
           <Button
             title={resendIn > 0 ? `Resend Code (${resendIn}s)` : 'Resend Code'}
             disabled={resendIn > 0}
-            onPress={() => sendOtp(phoneNumber)}
+            onPress={() => sendOtp(phone)}
           />
+          <Button title="Cancel" onPress={reset} />
         </View>
       )}
 
       {status === 'success' && (
         <View>
-          <Text style={styles.successText}>Authentication Complete!</Text>
-          <Button title="Start Over" onPress={reset} />
+          <Text style={styles.successText}>Authenticated!</Text>
+          <Button title="Log Out" onPress={reset} />
         </View>
       )}
 
       {status === 'error' && (
         <View>
-          <Text style={styles.errorText}>An error occurred during authentication.</Text>
+          <Text style={styles.errorText}>A fatal error occurred.</Text>
           <Button title="Try Again" onPress={reset} />
         </View>
       )}
-
-      <View style={styles.biometricContainer}>
-        <Button
-          title="Sign in with Biometrics"
-          onPress={() =>
-            authenticateWithBiometrics({
-              promptMessage: 'Confirm identity to log in',
-            })
-          }
-        />
-      </View>
     </View>
   );
 }
@@ -237,291 +187,229 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#ccc', padding: 12, marginBottom: 16 },
   successText: { fontSize: 18, color: 'green', marginBottom: 16 },
   errorText: { fontSize: 16, color: 'red', marginBottom: 16 },
-  biometricContainer: { marginTop: 32 },
 });
 ```
 
 ---
 
-### 2. Standalone State Machine and OTP Manager
+## Common Mistakes & How to Avoid Them
 
-For non-React environments (such as Node.js services or pure Redux/Zustand integrations), use `AuthStateMachine` and `OtpManager` directly.
+### 1. Forgetting Peer Dependencies
+`expo-linking`, `expo-local-authentication`, and `react-native` are **optional** peer dependencies.
+- If using magic/deep links: `npx expo install expo-linking`.
+- If using Face ID / biometrics: `npx expo install expo-local-authentication`.
+- If building a **React Web app**: import `OtpInput` instead of `OtpInputNative` — no `react-native` peer dependency is needed.
 
-```typescript
-import { AuthStateMachine, OtpManager } from '@salatech/auth-toolkit';
+### 2. Treating Biometrics as a Server Session Token
+Native biometric checks (`authenticateBiometric`) only verify local device hardware unlock. They do **not** mint a server session.
+- Always provide `onBiometricSuccess: async () => fetchServerSession()` to exchange the device check for a real JWT or auth token.
+- If `onBiometricSuccess` is omitted, `state.data` is `null` and `onVerified` is called without a token.
 
-// Create a typed state machine instance
-const authMachine = new AuthStateMachine<string, Error>();
+### 3. Misunderstanding the Retryable `pending` State
+When an entered OTP code is incorrect, the state machine dispatches `VERIFY_FAILURE`.
+- The status stays `'pending'` (it does **not** jump to `'error'`).
+- The error is placed in `state.error` so you can display an inline error message.
+- Wire `onEditStart={clearError}` on your `OtpInput`/`OtpInputNative` so the error message automatically clears as soon as the user starts editing their code.
 
-// Subscribe to state updates
-const unsubscribe = authMachine.subscribe((state) => {
-  console.log('Current Auth Status:', state.status);
-  console.log('Current Data:', state.data);
-  console.log('Attempt Count:', state.attempts);
-});
+### 4. Calling `sendOtp()` During Cooldown
+Calling `sendOtp()` while cooldown is active (`resendIn > 0`) is a no-op.
+- Always disable your resend button in the UI: `disabled={resendIn > 0}`.
 
-// Wrap the machine in OtpManager
-const otpManager = new OtpManager(authMachine, {
-  cooldownSeconds: 30,
-  codeLength: 6,
-});
-
-// Dispatch actions
-authMachine.dispatch({ type: 'SEND_CODE' });
-authMachine.dispatch({ type: 'CODE_SENT' });
-
-// Start the resend cooldown timer
-otpManager.startCooldown();
-
-// Validate input format
-const isValid = otpManager.isValidCode('123456'); // returns true
-console.log('Can resend:', otpManager.canResend()); // returns false during cooldown
-console.log('Remaining seconds:', otpManager.getRemainingCooldown());
-
-// Complete verification
-authMachine.dispatch({ type: 'VERIFY_CODE' });
-authMachine.dispatch({ type: 'VERIFY_SUCCESS', payload: 'auth-session-jwt' });
-
-// Clean up listener
-unsubscribe();
-```
+### 5. Double Submissions
+`sendOtp`, `verifyOtp`, and `authenticateWithBiometrics` automatically guard against concurrent double-submits while requests are in flight.
 
 ---
 
-### 3. Deep-Link / Magic-Link Parsing
+## State Machine Lifecycle
 
-Parse incoming deep links to extract security parameters or authentication tokens:
+Authentication status transitions follow a deterministic state machine managed by `authReducer`:
 
-```typescript
-import { parseAuthDeepLink, addDeepLinkListener } from '@salatech/auth-toolkit';
-
-// 1. Manual parsing of a single URL
-const result = parseAuthDeepLink(
-  'myapp://auth/callback?token=sec_abc123xyz&ref=email',
-  'token'
-);
-
-console.log(result.url);         // 'myapp://auth/callback?token=sec_abc123xyz&ref=email'
-console.log(result.path);        // 'auth/callback'
-console.log(result.token);       // 'sec_abc123xyz'
-console.log(result.queryParams); // { token: 'sec_abc123xyz', ref: 'email' }
-
-// 2. Setting up an event listener for incoming app links
-const removeListener = addDeepLinkListener((incomingUrl) => {
-  const parsed = parseAuthDeepLink(incomingUrl, 'token');
-  if (parsed.token) {
-    console.log('Received auth token from deep link:', parsed.token);
-  }
-});
-
-// Remove listener when no longer needed
-removeListener();
 ```
+               +-----------------------------------+
+               |                                   |
+               v                                   |
+            [ idle ] -----------------+            |
+               |                      |            |
+           SEND_CODE                  |            |
+               |                 VERIFY_SUCCESS    |
+               v                 (biometric/link)  |
+          [ sending ]                 |            |
+               |                      |            |
+           CODE_SENT                  |            |
+               |                      |            |
+               v                      |            |
+          [ pending ] <---------------+            |
+             |     |                  |            |
+   VERIFY_CODE     +-----------+      |            |
+             |                 |      |            |
+             v           VERIFY_FAILURE            |
+       [ verifying ] ----------+      |            |
+          |       |                   |            |
+VERIFY_SUCCESS   SET_ERROR            |            |
+          |       |                   |            |
+          v       v                   v            RESET
+      [ success ]  [ error ] ----------------------+
+```
+
+- **`idle`**: Ready for input.
+- **`sending`**: Code dispatch in progress.
+- **`pending`**: Code sent. Awaiting user input.
+- **`verifying`**: Code verification in progress.
+- **`success`**: Verification successful; authenticated payload is available in `state.data`.
+- **`error`**: Terminal failure; details in `state.error`.
 
 ---
 
-### 4. Biometric Authentication
+## Canonical Imports & Subpaths
 
-Perform local biometric checks using `isBiometricAvailable` and `authenticateBiometric`:
+Always prefer canonical imports from the package root:
 
 ```typescript
 import {
+  useOtpLogin,
+  useAuthFlow,
+  OtpInput,
+  OtpInputNative,
+  AuthStateMachine,
+  OtpManager,
+  AuthError,
+  parseAuthDeepLink,
+  addDeepLinkListener,
   isBiometricAvailable,
   authenticateBiometric,
 } from '@salatech/auth-toolkit';
+```
 
-async function performBiometricLogin() {
-  const canAuthenticate = await isBiometricAvailable();
+### Advanced Subpath Imports
 
-  if (!canAuthenticate) {
-    console.log('Biometric hardware unavailable or user has not registered credentials.');
-    return;
-  }
+For specialized bundle optimization or non-React environments, subpaths are supported:
 
-  const result = await authenticateBiometric({
-    promptMessage: 'Unlock application access',
-    cancelLabel: 'Cancel',
-    fallbackLabel: 'Enter Passcode',
-    disableDeviceFallback: false,
-  });
-
-  if (result.success) {
-    console.log('Biometric authentication succeeded.');
-  } else {
-    console.error('Biometric authentication failed:', result.error);
-  }
-}
+```typescript
+import { AuthStateMachine, authReducer, AuthError } from '@salatech/auth-toolkit/core';
+import { OtpManager } from '@salatech/auth-toolkit/otp';
+import { useAuthFlow, useOtpLogin } from '@salatech/auth-toolkit/hooks';
+import { OtpInput, OtpInputNative } from '@salatech/auth-toolkit/ui';
+import { parseAuthDeepLink, addDeepLinkListener } from '@salatech/auth-toolkit/deep-link';
+import { isBiometricAvailable, authenticateBiometric } from '@salatech/auth-toolkit/biometric';
 ```
 
 ---
 
 ## API Reference
 
-### Core Module (`@salatech/auth-toolkit`)
+### Hooks
 
-#### `AuthStatus`
-A union type representing all possible authentication statuses:
-- `'idle'`: Initial state before authentication has started.
-- `'sending'`: An OTP or request is being dispatched.
-- `'pending'`: An OTP code has been sent and is awaiting user input.
-- `'verifying'`: Verification of the submitted code or token is in progress.
-- `'success'`: Verification succeeded and payload data is available.
-- `'error'`: An operation failed and error data is set.
+#### `useOtpLogin<TToken = string>(options: UseOtpLoginOptions<TToken>): UseOtpLoginReturn`
+Minimal hook for standard OTP login flows.
 
-#### `AuthState<TData = unknown, TError = Error>`
-An object representing the state snapshot:
-- `status`: `AuthStatus`
-- `data`: `TData | null` - Data payload returned on successful authentication.
-- `error`: `TError | null` - Error payload returned on failure.
-- `attempts`: `number` - Cumulative count of verification attempts.
-- `lastUpdated`: `number` - Timestamp (in milliseconds) of the most recent state change.
+##### Options
+- `onSendOtp: (recipient: string) => Promise<void>` (Required)
+- `onVerifyOtp: (code: string) => Promise<TToken>` (Required)
+- `onVerified?: (token?: TToken) => void`
+- `onError?: (error: Error) => void`
+- `codeLength?: number` (Default: `6`)
+- `cooldownSeconds?: number` (Default: `60`)
 
-#### `AuthAction<TData = unknown, TError = Error>`
-Action objects processed by `authReducer`:
-- `{ type: 'SEND_CODE' }`
-- `{ type: 'CODE_SENT' }`
-- `{ type: 'VERIFY_CODE' }`
-- `{ type: 'VERIFY_SUCCESS'; payload: TData }`
-- `{ type: 'VERIFY_FAILURE'; payload: TError }` — retryable; returns status to `'pending'` while storing the error
-- `{ type: 'SET_ERROR'; payload: TError }` — terminal failure; status becomes `'error'`
-- `{ type: 'CLEAR_ERROR' }` — clears a retryable error while status is `'pending'`
-- `{ type: 'RESET' }`
-
-#### `AuthStateMachine<TData, TError>`
-- `constructor(initialState?: Partial<AuthState<TData, TError>>)`
-- `getState(): AuthState<TData, TError>`: Returns current state snapshot.
-- `dispatch(action: AuthAction<TData, TError>): AuthState<TData, TError>`: Applies state transition and notifies listeners.
-- `subscribe(listener: AuthStateMachineListener<TData, TError>): () => void`: Subscribes callback to state changes. Returns an unsubscribe function.
-
----
-
-### OTP Module
-
-#### `OtpManagerOptions`
-- `cooldownSeconds?: number`: Cooldown duration in seconds (default: `60`).
-- `codeLength?: number`: Expected numeric code length (default: `6`).
-
-#### `OtpManager<TData, TError>`
-- `constructor(machine: AuthStateMachine<TData, TError>, options?: OtpManagerOptions)`
-- `getCodeLength(): number`: Returns configured code length.
-- `getCooldownSeconds(): number`: Returns configured cooldown duration.
-- `startCooldown(): void`: Sets cooldown expiration timestamp to `Date.now() + cooldownSeconds * 1000`.
-- `getRemainingCooldown(): number`: Returns remaining cooldown seconds, rounded up.
-- `canResend(): boolean`: Returns `true` if remaining cooldown is `0`.
-- `isValidCode(code: string): boolean`: Validates if `code` contains strictly numeric digits matching `codeLength`.
-- `getState(): AuthState<TData, TError>`: Returns underlying state machine state.
-
----
-
-### Deep Link Module
-
-#### `DeepLinkParseResult`
-- `url`: `string` - The full original URL string.
-- `path`: `string | null` - The path portion extracted from the URL.
-- `queryParams`: `Record<string, string | string[] | undefined>` - Parsed query parameters.
-- `token`: `string | null` - Extracted token matching the target parameter name.
-
-#### Functions
-- `parseAuthDeepLink(url: string, tokenParamName?: string): DeepLinkParseResult`: Parses URL using `expo-linking`. Throws an error if `expo-linking` is not installed.
-- `addDeepLinkListener(callback: (url: string) => void): () => void`: Subscribes callback to URL event changes. Returns an unsubscribe function.
-
----
-
-### Biometric Module
-
-#### `BiometricOptions`
-- `promptMessage?: string`: Custom text prompt for native dialog (default: `'Authenticate to continue'`).
-- `cancelLabel?: string`: Label for cancel button (default: `'Cancel'`).
-- `fallbackLabel?: string`: Label for passcode fallback button (default: `'Use Passcode'`).
-- `disableDeviceFallback?: boolean`: If `true`, disables fallback to system passcode (default: `false`).
-
-#### `BiometricResult`
-- `success`: `boolean` - Indicates if user successfully authenticated.
-- `error?: string` - Description of failure cause, if unsuccessful.
-
-#### Functions
-- `isBiometricAvailable(): Promise<boolean>`: Resolves to `true` if biometric hardware is present and user credentials are enrolled.
-- `authenticateBiometric(options?: BiometricOptions): Promise<BiometricResult>`: Prompts native biometric dialog and returns result.
-
----
-
-### React Hooks Module
+##### Return Value
+- `status`: `'idle' | 'sending' | 'pending' | 'verifying' | 'success' | 'error'`
+- `error`: `Error | null`
+- `resendIn`: `number` (remaining cooldown in seconds)
+- `sendOtp`: `(recipient: string) => Promise<void>`
+- `verifyOtp`: `(code: string) => Promise<void>`
+- `clearError`: `() => void`
+- `reset`: `() => void`
 
 #### `useAuthFlow<TToken = string>(options?: UseAuthFlowOptions<TToken>): UseAuthFlowReturn<TToken>`
+Comprehensive auth hook supporting OTP, deep links, and biometrics.
 
-##### Options (`UseAuthFlowOptions<TToken>`)
-- `strategy?: 'otp' | 'deep-link' | 'biometric' | 'hybrid'` (default: `'hybrid'`). Restricts which methods are active; unsupported methods dispatch `SET_ERROR`.
-- `cooldownSeconds?: number` (default: `60`)
-- `codeLength?: number` (default: `6`)
-- `tokenParamName?: string` (default: `'token'`)
+##### Options
+- `strategy?: 'otp' | 'deep-link' | 'biometric' | 'hybrid'` (Default: `'hybrid'`)
+- `cooldownSeconds?: number` (Default: `60`)
+- `codeLength?: number` (Default: `6`)
+- `tokenParamName?: string` (Default: `'token'`)
 - `onSendOtp?: (recipient: string) => Promise<void>`
 - `onVerifyOtp?: (code: string) => Promise<TToken>`
-- `onBiometricSuccess?: () => Promise<TToken> | TToken`: Called after hardware biometric auth succeeds; return a session token when available. Defaults to `'biometric-verified'` when omitted.
-- `onVerified?: (token: TToken) => void`
+- `onBiometricSuccess?: () => Promise<TToken> | TToken`
+- `onVerified?: (token?: TToken) => void`
 - `onError?: (error: Error) => void`
 
-##### Return Value (`UseAuthFlowReturn<TToken>`)
+##### Return Value
 - `status`: `AuthStatus`
 - `state`: `AuthState<TToken, Error>`
-- `resendIn`: `number` (Remaining cooldown timer in seconds)
+- `resendIn`: `number`
 - `sendOtp`: `(recipient: string) => Promise<void>`
 - `verifyOtp`: `(code: string) => Promise<void>`
 - `handleDeepLink`: `(url: string) => void`
 - `authenticateWithBiometrics`: `(options?: BiometricOptions) => Promise<boolean>`
-- `clearError`: `() => void` — clears retryable OTP errors while `status === 'pending'`
+- `clearError`: `() => void`
 - `reset`: `() => void`
 
 ---
 
-### UI Module
+### UI Components
 
-#### `OtpInput` (web)
-DOM-based multi-digit input for React web apps.
+#### `OtpInput` (React Web) & `OtpInputNative` (React Native / Expo)
 
-#### `OtpInputNative` (React Native)
-`TextInput`-based multi-digit input for Expo / React Native apps.
+##### Shared Props
+- `length?: number`: Number of digit boxes (Default: `6`).
+- `value: string`: Current OTP code string.
+- `onChange: (value: string) => void`: Change handler.
+- `onComplete?: (code: string) => void`: Fired when all boxes are filled.
+- `disabled?: boolean`: Disables input fields (Default: `false`).
+- `autoFocus?: boolean`: Focuses first box on mount (Default: `true`).
+- `onEditStart?: () => void`: Fired on user typing; connect to `clearError()`.
 
-##### Shared props
-- `length?: number`: Number of input boxes (default: `6`).
-- `value: string`: Current string value.
-- `onChange: (value: string) => void`: Callback triggered when character value changes.
-- `onComplete?: (code: string) => void`: Callback triggered automatically when `value.length === length`.
-- `disabled?: boolean`: Disables input fields when `true`.
-- `autoFocus?: boolean`: Focuses the first empty digit on mount (default: `true`).
-- `onEditStart?: () => void`: Fired when the user edits digits — wire to `clearError()` from `useAuthFlow`.
-
-##### Web-only (`OtpInput`)
+##### Web Props (`OtpInput`)
 - `containerStyle?: React.CSSProperties`
 - `inputStyle?: React.CSSProperties`
 
-##### Native-only (`OtpInputNative`)
+##### Native Props (`OtpInputNative`)
 - `containerStyle?: object`
 - `inputStyle?: object`
 
-Both support digit auto-advance, Backspace navigation, paste/autofill of a full code, and OTP autofill hints on the first box.
+---
+
+### Core State Machine & Error System
+
+#### `AuthStateMachine<TData, TError>`
+Zero-dependency state machine container.
+- `getState(): AuthState<TData, TError>`
+- `dispatch(action: AuthAction<TData, TError>): AuthState<TData, TError>`
+- `subscribe(listener: AuthStateMachineListener<TData, TError>): () => void`
+
+#### `AuthError`
+Standard error class with machine-readable error codes:
+```ts
+export type AuthErrorCode =
+  | 'INVALID_CODE'
+  | 'COOLDOWN_ACTIVE'
+  | 'STRATEGY_DISABLED'
+  | 'MISSING_DEPENDENCY'
+  | 'NO_HANDLER'
+  | 'AUTH_FAILED';
+```
+
+---
+
+### Deep Link & Biometric Utilities
+
+- `parseAuthDeepLink(url: string, tokenParamName?: string): DeepLinkParseResult`
+- `addDeepLinkListener(callback: (url: string) => void): () => void`
+- `isBiometricAvailable(): Promise<boolean>`
+- `authenticateBiometric(options?: BiometricOptions): Promise<BiometricResult>`
 
 ---
 
 ## Development and Testing
 
-### Run Unit Tests
-Unit tests use Vitest and run in a pure Node.js environment without native simulators:
-
 ```bash
+# Run unit and integration tests
 npm test
-```
 
-### Type Check
-Run static type validation with TypeScript compiler:
-
-```bash
+# Run static type checks
 npm run typecheck
-```
 
-### Build Production Artifacts
-Generate CommonJS, ES Modules, and `.d.ts` declaration bundles in `./dist`:
-
-```bash
+# Build ESM, CJS, and .d.ts artifacts
 npm run build
 ```
 
@@ -529,7 +417,6 @@ npm run build
 
 ## License
 
-Distributed under the MIT License. See [LICENSE](LICENSE) for full details.
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.
 
 Copyright (c) 2026 Salatech
-

@@ -1,6 +1,6 @@
 {
   "name": "@salatech/auth-toolkit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Unified OTP, deep-link, and biometric auth toolkit for React Native and Expo apps",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -51,7 +51,10 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "llms.txt"
   ],
   "scripts": {
     "build": "tsup",
