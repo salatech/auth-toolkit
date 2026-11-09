@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticateBiometric, BiometricOptions } from '../biometric';
 import { AuthStateMachine } from '../core/state-machine';
-import { AuthState, AuthStatus } from '../core/types';
+import { AuthError, AuthState, AuthStatus } from '../core/types';
 import { parseAuthDeepLink } from '../deep-link';
 import { OtpManager } from '../otp';
 
@@ -14,9 +14,12 @@ export interface UseAuthFlowOptions<TToken = string> {
   tokenParamName?: string;
   onSendOtp?: (recipient: string) => Promise<void>;
   onVerifyOtp?: (code: string) => Promise<TToken>;
-  /** Called after biometric hardware auth succeeds. Return a session token when available. */
+  /**
+   * Called after biometric hardware auth succeeds. Return a session token when available.
+   * If omitted, no token is minted, state.data is null, and onVerified is called without a token.
+   */
   onBiometricSuccess?: () => Promise<TToken> | TToken;
-  onVerified?: (token: TToken) => void;
+  onVerified?: (token?: TToken) => void;
   onError?: (error: Error) => void;
 }
 
@@ -38,6 +41,19 @@ function strategyAllows(strategy: AuthStrategy, feature: 'otp' | 'deep-link' | '
   return strategy === feature;
 }
 
+const isDev =
+  Boolean((globalThis as unknown as { __DEV__?: boolean }).__DEV__) ||
+  (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production');
+
+function warnUnsupported(feature: string, strategy: AuthStrategy): void {
+  if (isDev) {
+    console.warn(
+      `[auth-toolkit] Feature '${feature}' was invoked, but is not enabled for strategy '${strategy}'. ` +
+        `To enable, configure the strategy option to 'hybrid' or '${feature}'.`
+    );
+  }
+}
+
 export function useAuthFlow<TToken = string>(
   options: UseAuthFlowOptions<TToken> = {}
 ): UseAuthFlowReturn<TToken> {
@@ -53,6 +69,29 @@ export function useAuthFlow<TToken = string>(
     onError,
   } = options;
 
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const callbacksRef = useRef({
+    onSendOtp,
+    onVerifyOtp,
+    onBiometricSuccess,
+    onVerified,
+    onError,
+  });
+  callbacksRef.current = {
+    onSendOtp,
+    onVerifyOtp,
+    onBiometricSuccess,
+    onVerified,
+    onError,
+  };
+
   const machineRef = useRef<AuthStateMachine<TToken, Error>>(
     new AuthStateMachine<TToken, Error>()
   );
@@ -67,48 +106,60 @@ export function useAuthFlow<TToken = string>(
     machineRef.current.getState()
   );
   const [resendIn, setResendIn] = useState<number>(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const syncTimer = useCallback(() => {
+    clearTimer();
+    const remaining = otpManagerRef.current.getRemainingCooldown();
+    if (isMountedRef.current) {
+      setResendIn(remaining);
+    }
+    if (remaining <= 0) return;
+
+    timerRef.current = setInterval(() => {
+      const currentRemaining = otpManagerRef.current.getRemainingCooldown();
+      if (!isMountedRef.current) {
+        clearTimer();
+        return;
+      }
+      setResendIn(currentRemaining);
+      if (currentRemaining <= 0) {
+        clearTimer();
+      }
+    }, 1000);
+  }, [clearTimer]);
+
+  useEffect(() => {
+    return () => {
+      clearTimer();
+    };
+  }, [clearTimer]);
 
   useEffect(() => {
     const unsubscribe = machineRef.current.subscribe((newState) => {
-      setState(newState);
+      if (isMountedRef.current) {
+        setState(newState);
+      }
     });
     return unsubscribe;
   }, []);
 
-  // Cooldown ticker loop
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    if (resendIn > 0) {
-      interval = setInterval(() => {
-        const remaining = otpManagerRef.current.getRemainingCooldown();
-        setResendIn(remaining);
-        if (remaining <= 0 && interval) {
-          clearInterval(interval);
-        }
-      }, 1000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [resendIn]);
-
-  const rejectUnsupported = useCallback(
-    (feature: string) => {
-      const error = new Error(
-        `[auth-toolkit] '${feature}' is not enabled for strategy '${strategy}'.`
-      );
-      machineRef.current.dispatch({ type: 'SET_ERROR', payload: error });
-      if (onError) onError(error);
-    },
-    [strategy, onError]
-  );
-
   const sendOtp = useCallback(
     async (recipient: string) => {
       if (!strategyAllows(strategy, 'otp')) {
-        rejectUnsupported('otp');
+        warnUnsupported('otp', strategy);
+        return;
+      }
+
+      const currentStatus = machineRef.current.getState().status;
+      if (currentStatus === 'sending' || currentStatus === 'verifying') {
         return;
       }
 
@@ -119,58 +170,72 @@ export function useAuthFlow<TToken = string>(
       machineRef.current.dispatch({ type: 'SEND_CODE' });
 
       try {
-        if (onSendOtp) {
-          await onSendOtp(recipient);
+        if (callbacksRef.current.onSendOtp) {
+          await callbacksRef.current.onSendOtp(recipient);
         }
+        if (!isMountedRef.current) return;
         machineRef.current.dispatch({ type: 'CODE_SENT' });
         otpManagerRef.current.startCooldown();
-        setResendIn(otpManagerRef.current.getRemainingCooldown());
+        syncTimer();
       } catch (err) {
+        if (!isMountedRef.current) return;
         const error = err instanceof Error ? err : new Error(String(err));
         machineRef.current.dispatch({ type: 'SET_ERROR', payload: error });
-        if (onError) onError(error);
+        callbacksRef.current.onError?.(error);
       }
     },
-    [strategy, rejectUnsupported, onSendOtp, onError]
+    [strategy, syncTimer]
   );
 
   const verifyOtp = useCallback(
     async (code: string) => {
       if (!strategyAllows(strategy, 'otp')) {
-        rejectUnsupported('otp');
+        warnUnsupported('otp', strategy);
+        return;
+      }
+
+      const currentStatus = machineRef.current.getState().status;
+      if (currentStatus === 'verifying' || currentStatus === 'sending') {
         return;
       }
 
       if (!otpManagerRef.current.isValidCode(code)) {
-        const err = new Error(`Invalid code format. Expected ${codeLength} digits.`);
-        // Retryable: stay on the OTP entry screen
+        const err = new AuthError(
+          `Invalid code format. Expected ${codeLength} digits.`,
+          'INVALID_CODE'
+        );
         machineRef.current.dispatch({ type: 'VERIFY_FAILURE', payload: err });
-        if (onError) onError(err);
+        callbacksRef.current.onError?.(err);
         return;
       }
 
       machineRef.current.dispatch({ type: 'VERIFY_CODE' });
 
       try {
-        if (!onVerifyOtp) {
-          throw new Error('No onVerifyOtp handler provided to useAuthFlow');
+        if (!callbacksRef.current.onVerifyOtp) {
+          throw new AuthError(
+            'No onVerifyOtp handler provided to useAuthFlow. Pass onVerifyOtp to verify submitted codes.',
+            'NO_HANDLER'
+          );
         }
-        const token = await onVerifyOtp(code);
+        const token = await callbacksRef.current.onVerifyOtp(code);
+        if (!isMountedRef.current) return;
         machineRef.current.dispatch({ type: 'VERIFY_SUCCESS', payload: token });
-        if (onVerified) onVerified(token);
+        callbacksRef.current.onVerified?.(token);
       } catch (err) {
+        if (!isMountedRef.current) return;
         const error = err instanceof Error ? err : new Error(String(err));
         machineRef.current.dispatch({ type: 'VERIFY_FAILURE', payload: error });
-        if (onError) onError(error);
+        callbacksRef.current.onError?.(error);
       }
     },
-    [strategy, rejectUnsupported, codeLength, onVerifyOtp, onVerified, onError]
+    [strategy, codeLength]
   );
 
   const handleDeepLink = useCallback(
     (url: string) => {
       if (!strategyAllows(strategy, 'deep-link')) {
-        rejectUnsupported('deep-link');
+        warnUnsupported('deep-link', strategy);
         return;
       }
 
@@ -181,61 +246,80 @@ export function useAuthFlow<TToken = string>(
             type: 'VERIFY_SUCCESS',
             payload: result.token as unknown as TToken,
           });
-          if (onVerified) onVerified(result.token as unknown as TToken);
+          callbacksRef.current.onVerified?.(result.token as unknown as TToken);
         } else {
-          const err = new Error('No token parameter found in deep link URL');
+          const err = new AuthError(
+            `No token parameter found in deep link URL: '${url}'. Verify that the link contains '?${tokenParamName}=...'.`,
+            'AUTH_FAILED'
+          );
           machineRef.current.dispatch({ type: 'SET_ERROR', payload: err });
-          if (onError) onError(err);
+          callbacksRef.current.onError?.(err);
         }
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         machineRef.current.dispatch({ type: 'SET_ERROR', payload: error });
-        if (onError) onError(error);
+        callbacksRef.current.onError?.(error);
       }
     },
-    [strategy, rejectUnsupported, tokenParamName, onVerified, onError]
+    [strategy, tokenParamName]
   );
 
   const authenticateWithBiometrics = useCallback(
     async (biometricOptions?: BiometricOptions): Promise<boolean> => {
       if (!strategyAllows(strategy, 'biometric')) {
-        rejectUnsupported('biometric');
+        warnUnsupported('biometric', strategy);
+        return false;
+      }
+
+      const currentStatus = machineRef.current.getState().status;
+      if (currentStatus === 'verifying' || currentStatus === 'sending') {
         return false;
       }
 
       try {
         const res = await authenticateBiometric(biometricOptions);
+        if (!isMountedRef.current) return false;
+
         if (res.success) {
-          const token = onBiometricSuccess
-            ? await onBiometricSuccess()
-            : ('biometric-verified' as unknown as TToken);
+          const token = callbacksRef.current.onBiometricSuccess
+            ? await callbacksRef.current.onBiometricSuccess()
+            : undefined;
+
+          if (!isMountedRef.current) return false;
 
           machineRef.current.dispatch({
             type: 'VERIFY_SUCCESS',
-            payload: token,
+            payload: (token ?? null) as unknown as TToken,
           });
-          if (onVerified) onVerified(token);
+          callbacksRef.current.onVerified?.(token);
           return true;
         } else {
-          const err = new Error(res.error ?? 'Biometric authentication failed');
+          const err = new AuthError(
+            res.error ?? 'Biometric authentication failed',
+            'AUTH_FAILED'
+          );
           machineRef.current.dispatch({ type: 'SET_ERROR', payload: err });
-          if (onError) onError(err);
+          callbacksRef.current.onError?.(err);
           return false;
         }
       } catch (err) {
+        if (!isMountedRef.current) return false;
         const error = err instanceof Error ? err : new Error(String(err));
         machineRef.current.dispatch({ type: 'SET_ERROR', payload: error });
-        if (onError) onError(error);
+        callbacksRef.current.onError?.(error);
         return false;
       }
     },
-    [strategy, rejectUnsupported, onBiometricSuccess, onVerified, onError]
+    [strategy]
   );
 
   const reset = useCallback(() => {
+    clearTimer();
     machineRef.current.dispatch({ type: 'RESET' });
-    setResendIn(0);
-  }, []);
+    if (isMountedRef.current) {
+      setResendIn(0);
+    }
+  }, [clearTimer]);
 
   const clearError = useCallback(() => {
     machineRef.current.dispatch({ type: 'CLEAR_ERROR' });

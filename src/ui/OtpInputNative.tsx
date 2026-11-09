@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import {
-  TextInput,
-  View,
-  type TextInputInstance,
+import type {
+  TextInputInstance,
+  TextInputProps,
+  ViewProps,
 } from 'react-native';
 import {
   applyDigitsAt,
@@ -10,6 +10,36 @@ import {
   isComplete,
   onlyDigits,
 } from './otp-input-logic';
+
+export type ReactNativeComponents = {
+  View: React.ComponentType<ViewProps>;
+  TextInput: React.ComponentType<
+    TextInputProps & { ref?: React.Ref<TextInputInstance> }
+  >;
+};
+
+let reactNativeOverride: ReactNativeComponents | null = null;
+
+/** @internal Test-only override for the lazy react-native loader. */
+export function __setReactNativeForTests(
+  components: ReactNativeComponents | null
+): void {
+  reactNativeOverride = components;
+}
+
+function loadReactNative(): ReactNativeComponents {
+  if (reactNativeOverride) {
+    return reactNativeOverride;
+  }
+  try {
+    return require('react-native') as ReactNativeComponents;
+  } catch {
+    throw new Error(
+      "[auth-toolkit] 'react-native' is required to use OtpInputNative. " +
+        "Please install 'react-native' in your project, or use OtpInput for web."
+    );
+  }
+}
 
 export interface OtpInputNativeProps {
   length?: number;
@@ -35,6 +65,7 @@ export const OtpInputNative: React.FC<OtpInputNativeProps> = ({
   containerStyle,
   inputStyle,
 }) => {
+  const { View, TextInput } = loadReactNative();
   const digits = Array.from({ length }, (_, i) => value[i] || '');
   const inputRefs = useRef<Array<TextInputInstance | null>>([]);
 

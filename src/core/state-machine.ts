@@ -20,6 +20,13 @@ export function authReducer<TData = unknown, TError = Error>(
 
   switch (action.type) {
     case 'SEND_CODE':
+      if (
+        state.status === 'sending' ||
+        state.status === 'verifying' ||
+        state.status === 'success'
+      ) {
+        return state;
+      }
       return {
         ...state,
         status: 'sending',
@@ -28,6 +35,9 @@ export function authReducer<TData = unknown, TError = Error>(
       };
 
     case 'CODE_SENT':
+      if (state.status !== 'sending') {
+        return state;
+      }
       return {
         ...state,
         status: 'pending',
@@ -36,6 +46,9 @@ export function authReducer<TData = unknown, TError = Error>(
       };
 
     case 'VERIFY_CODE':
+      if (state.status !== 'pending') {
+        return state;
+      }
       return {
         ...state,
         status: 'verifying',
@@ -45,6 +58,9 @@ export function authReducer<TData = unknown, TError = Error>(
       };
 
     case 'VERIFY_SUCCESS':
+      if (state.status === 'sending' || state.status === 'success') {
+        return state;
+      }
       return {
         ...state,
         status: 'success',
@@ -54,6 +70,9 @@ export function authReducer<TData = unknown, TError = Error>(
       };
 
     case 'VERIFY_FAILURE':
+      if (state.status !== 'verifying') {
+        return state;
+      }
       // Retryable: return to pending so the user can re-enter a code
       // without calling reset(). Fatal failures use SET_ERROR instead.
       return {
@@ -64,6 +83,9 @@ export function authReducer<TData = unknown, TError = Error>(
       };
 
     case 'SET_ERROR':
+      if (state.status === 'success') {
+        return state;
+      }
       return {
         ...state,
         status: 'error',

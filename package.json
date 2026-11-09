@@ -5,39 +5,47 @@
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "react-native": "./dist/index.mjs",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "react-native": "./dist/index.mjs",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     },
     "./core": {
       "types": "./dist/core/index.d.ts",
+      "react-native": "./dist/core/index.mjs",
       "import": "./dist/core/index.mjs",
       "require": "./dist/core/index.js"
     },
     "./otp": {
       "types": "./dist/otp/index.d.ts",
+      "react-native": "./dist/otp/index.mjs",
       "import": "./dist/otp/index.mjs",
       "require": "./dist/otp/index.js"
     },
     "./deep-link": {
       "types": "./dist/deep-link/index.d.ts",
+      "react-native": "./dist/deep-link/index.mjs",
       "import": "./dist/deep-link/index.mjs",
       "require": "./dist/deep-link/index.js"
     },
     "./biometric": {
       "types": "./dist/biometric/index.d.ts",
+      "react-native": "./dist/biometric/index.mjs",
       "import": "./dist/biometric/index.mjs",
       "require": "./dist/biometric/index.js"
     },
     "./hooks": {
       "types": "./dist/hooks/index.d.ts",
+      "react-native": "./dist/hooks/index.mjs",
       "import": "./dist/hooks/index.mjs",
       "require": "./dist/hooks/index.js"
     },
     "./ui": {
       "types": "./dist/ui/index.d.ts",
+      "react-native": "./dist/ui/index.mjs",
       "import": "./dist/ui/index.mjs",
       "require": "./dist/ui/index.js"
     }

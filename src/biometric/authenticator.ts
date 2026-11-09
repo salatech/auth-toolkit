@@ -10,18 +10,38 @@ export interface BiometricResult {
   error?: string;
 }
 
-import { createRequire } from 'node:module';
+export interface ExpoLocalAuthenticationModule {
+  hasHardwareAsync: () => Promise<boolean>;
+  isEnrolledAsync: () => Promise<boolean>;
+  authenticateAsync: (options?: {
+    promptMessage?: string;
+    cancelLabel?: string;
+    fallbackLabel?: string;
+    disableDeviceFallback?: boolean;
+  }) => Promise<{ success: boolean; error?: string }>;
+}
 
-const nodeRequire = createRequire(import.meta.url);
+let localAuthOverride: ExpoLocalAuthenticationModule | null = null;
 
-function getExpoLocalAuthentication(): any {
+/** @internal Test-only override for the lazy expo-local-authentication loader. */
+export function __setExpoLocalAuthenticationForTests(
+  module: ExpoLocalAuthenticationModule | null
+): void {
+  localAuthOverride = module;
+}
+
+function getExpoLocalAuthentication(): ExpoLocalAuthenticationModule {
+  if (localAuthOverride) {
+    return localAuthOverride;
+  }
+
   try {
     // Lazy load keeps expo-local-authentication an optional peer dependency.
-    return nodeRequire('expo-local-authentication');
+    return require('expo-local-authentication') as ExpoLocalAuthenticationModule;
   } catch {
     throw new Error(
       "[auth-toolkit] 'expo-local-authentication' is required for biometric auth features. " +
-        "Please install 'expo-local-authentication' as a dependency in your project."
+        "Please install it in your project: npx expo install expo-local-authentication"
     );
   }
 }

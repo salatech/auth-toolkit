@@ -63,4 +63,57 @@ describe('OtpManager', () => {
     machine.dispatch({ type: 'SEND_CODE' });
     expect(manager.getState().status).toBe('sending');
   });
+
+  it('should handle isValidCode edge cases (non-numeric, internal whitespace, non-string, length)', () => {
+    const manager = new OtpManager(new AuthStateMachine(), { codeLength: 6 });
+
+    // Invalid formats
+    expect(manager.isValidCode('')).toBe(false);
+    expect(manager.isValidCode('   ')).toBe(false);
+    expect(manager.isValidCode('12 34 56')).toBe(false);
+    expect(manager.isValidCode('123 456')).toBe(false);
+    expect(manager.isValidCode('12345e')).toBe(false);
+    expect(manager.isValidCode('-12345')).toBe(false);
+    expect(manager.isValidCode('+12345')).toBe(false);
+    expect(manager.isValidCode('12.345')).toBe(false);
+    expect(manager.isValidCode('١٢٣٤٥٦')).toBe(false); // Arabic digits
+    expect(manager.isValidCode('１２３４５６')).toBe(false); // Full-width digits
+    expect(manager.isValidCode('123456\n')).toBe(true); // Trimming works
+    expect(manager.isValidCode('\t123456\t')).toBe(true);
+
+    // Type safety edge cases
+    expect(manager.isValidCode(null as unknown as string)).toBe(false);
+    expect(manager.isValidCode(undefined as unknown as string)).toBe(false);
+    expect(manager.isValidCode(123456 as unknown as string)).toBe(false);
+    expect(manager.isValidCode({} as unknown as string)).toBe(false);
+  });
+
+  it('should handle cooldown edge cases (zero cooldown, repeated starts, expiry boundary)', () => {
+    const zeroManager = new OtpManager(new AuthStateMachine(), { cooldownSeconds: 0 });
+    expect(zeroManager.canResend()).toBe(true);
+    expect(zeroManager.getRemainingCooldown()).toBe(0);
+    zeroManager.startCooldown();
+    expect(zeroManager.canResend()).toBe(true);
+    expect(zeroManager.getRemainingCooldown()).toBe(0);
+
+    const manager = new OtpManager(new AuthStateMachine(), { cooldownSeconds: 15 });
+    manager.startCooldown();
+    expect(manager.getRemainingCooldown()).toBe(15);
+
+    // Repeated startCooldown resets the timer
+    vi.advanceTimersByTime(5000);
+    expect(manager.getRemainingCooldown()).toBe(10);
+    manager.startCooldown();
+    expect(manager.getRemainingCooldown()).toBe(15);
+
+    // Exact expiry
+    vi.advanceTimersByTime(15000);
+    expect(manager.getRemainingCooldown()).toBe(0);
+    expect(manager.canResend()).toBe(true);
+
+    // Past expiry
+    vi.advanceTimersByTime(5000);
+    expect(manager.getRemainingCooldown()).toBe(0);
+    expect(manager.canResend()).toBe(true);
+  });
 });

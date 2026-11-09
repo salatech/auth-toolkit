@@ -27,3 +27,21 @@ export type AuthAction<TData = unknown, TError = Error> =
 export type AuthStateMachineListener<TData = unknown, TError = Error> = (
   state: AuthState<TData, TError>
 ) => void;
+export type AuthErrorCode =
+  | 'INVALID_CODE'
+  | 'COOLDOWN_ACTIVE'
+  | 'STRATEGY_DISABLED'
+  | 'MISSING_DEPENDENCY'
+  | 'NO_HANDLER'
+  | 'AUTH_FAILED';
+
+export class AuthError extends Error {
+  public readonly code: AuthErrorCode;
+
+  constructor(message: string, code: AuthErrorCode) {
+    super(message);
+    this.name = 'AuthError';
+    this.code = code;
+    Object.setPrototypeOf(this, AuthError.prototype);
+  }
+}
