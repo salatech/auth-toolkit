@@ -1,3 +1,5 @@
+import { AuthError } from '../core/types';
+
 export interface BiometricOptions {
   promptMessage?: string;
   cancelLabel?: string;
@@ -39,9 +41,9 @@ function getExpoLocalAuthentication(): ExpoLocalAuthenticationModule {
     // Lazy load keeps expo-local-authentication an optional peer dependency.
     return require('expo-local-authentication') as ExpoLocalAuthenticationModule;
   } catch {
-    throw new Error(
-      "[auth-toolkit] 'expo-local-authentication' is required for biometric auth features. " +
-        "Please install it in your project: npx expo install expo-local-authentication"
+    throw new AuthError(
+      "[auth-toolkit] 'expo-local-authentication' is not installed. Run: npx expo install expo-local-authentication",
+      'MISSING_DEPENDENCY'
     );
   }
 }

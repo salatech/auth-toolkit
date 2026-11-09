@@ -12,11 +12,15 @@ describe('Built Package Entry Points Smoke Test', () => {
     const ui = require('../../dist/ui/index.js');
 
     expect(root.AuthStateMachine).toBeDefined();
+    expect(root.useOtpLogin).toBeDefined();
+    expect(root.AuthError).toBeDefined();
     expect(core.AuthStateMachine).toBeDefined();
+    expect(core.AuthError).toBeDefined();
     expect(otp.OtpManager).toBeDefined();
     expect(deepLink.parseAuthDeepLink).toBeDefined();
     expect(biometric.isBiometricAvailable).toBeDefined();
     expect(hooks.useAuthFlow).toBeDefined();
+    expect(hooks.useOtpLogin).toBeDefined();
     expect(ui.OtpInput).toBeDefined();
     expect(ui.OtpInputNative).toBeDefined();
   });
@@ -31,11 +35,15 @@ describe('Built Package Entry Points Smoke Test', () => {
     const ui = await import('../../dist/ui/index.mjs');
 
     expect(root.AuthStateMachine).toBeDefined();
+    expect(root.useOtpLogin).toBeDefined();
+    expect(root.AuthError).toBeDefined();
     expect(core.AuthStateMachine).toBeDefined();
+    expect(core.AuthError).toBeDefined();
     expect(otp.OtpManager).toBeDefined();
     expect(deepLink.parseAuthDeepLink).toBeDefined();
     expect(biometric.isBiometricAvailable).toBeDefined();
     expect(hooks.useAuthFlow).toBeDefined();
+    expect(hooks.useOtpLogin).toBeDefined();
     expect(ui.OtpInput).toBeDefined();
     expect(ui.OtpInputNative).toBeDefined();
   });

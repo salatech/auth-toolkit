@@ -70,7 +70,7 @@ export function authReducer<TData = unknown, TError = Error>(
       };
 
     case 'VERIFY_FAILURE':
-      if (state.status !== 'verifying') {
+      if (state.status !== 'verifying' && state.status !== 'pending') {
         return state;
       }
       // Retryable: return to pending so the user can re-enter a code

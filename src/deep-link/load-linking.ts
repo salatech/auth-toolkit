@@ -1,3 +1,5 @@
+import { AuthError } from '../core/types';
+
 export type ExpoLinkingModule = {
   parse: (url: string) => {
     path?: string | null;
@@ -25,9 +27,9 @@ export function loadExpoLinking(): ExpoLinkingModule {
     // Lazy load keeps expo-linking an optional peer dependency.
     return require('expo-linking') as ExpoLinkingModule;
   } catch {
-    throw new Error(
-      "[auth-toolkit] 'expo-linking' is required for deep link auth features. " +
-        "Please install it in your project: npx expo install expo-linking"
+    throw new AuthError(
+      "[auth-toolkit] 'expo-linking' is not installed. Run: npx expo install expo-linking",
+      'MISSING_DEPENDENCY'
     );
   }
 }

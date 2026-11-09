@@ -18,6 +18,8 @@ export type ReactNativeComponents = {
   >;
 };
 
+import { AuthError } from '../core/types';
+
 let reactNativeOverride: ReactNativeComponents | null = null;
 
 /** @internal Test-only override for the lazy react-native loader. */
@@ -34,9 +36,9 @@ function loadReactNative(): ReactNativeComponents {
   try {
     return require('react-native') as ReactNativeComponents;
   } catch {
-    throw new Error(
-      "[auth-toolkit] 'react-native' is required to use OtpInputNative. " +
-        "Please install 'react-native' in your project, or use OtpInput for web."
+    throw new AuthError(
+      "[auth-toolkit] 'react-native' is not installed. Run: npx expo install react-native (or use OtpInput for web apps).",
+      'MISSING_DEPENDENCY'
     );
   }
 }
