@@ -294,6 +294,165 @@ describe('useAuthFlow', () => {
     });
   });
 
+  it('should discard a verify result that resolves after reset()', async () => {
+    let resolveVerify: (token: string) => void;
+    const onVerifyOtp = vi.fn().mockImplementation(
+      () => new Promise<string>((resolve) => { resolveVerify = resolve; })
+    );
+    const onVerified = vi.fn();
+
+    const { result } = renderHook(() =>
+      useAuthFlow({ strategy: 'otp', onSendOtp: vi.fn().mockResolvedValue(undefined), onVerifyOtp, onVerified })
+    );
+
+    await act(async () => {
+      await result.current.sendOtp('+15555550100');
+    });
+    let p: Promise<void>;
+    act(() => {
+      p = result.current.verifyOtp('123456');
+    });
+    act(() => {
+      result.current.reset();
+    });
+    await act(async () => {
+      resolveVerify!('stale-token');
+      await p!;
+    });
+
+    expect(result.current.status).toBe('idle');
+    expect(result.current.state.data).toBeNull();
+    expect(onVerified).not.toHaveBeenCalled();
+  });
+
+  it('should not verify before a code was sent or after success', async () => {
+    const onVerifyOtp = vi.fn().mockResolvedValue('token');
+    const onVerified = vi.fn();
+    const { result } = renderHook(() =>
+      useAuthFlow({ strategy: 'otp', onSendOtp: vi.fn().mockResolvedValue(undefined), onVerifyOtp, onVerified })
+    );
+
+    await act(async () => {
+      await result.current.verifyOtp('123456');
+    });
+    expect(onVerifyOtp).not.toHaveBeenCalled();
+    expect(result.current.status).toBe('idle');
+
+    await act(async () => {
+      await result.current.sendOtp('+15555550100');
+      await result.current.verifyOtp('123456');
+      await result.current.verifyOtp('123456');
+    });
+    expect(onVerifyOtp).toHaveBeenCalledTimes(1);
+    expect(onVerified).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not send another OTP once authenticated', async () => {
+    const onSendOtp = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      useAuthFlow({ strategy: 'otp', cooldownSeconds: 0, onSendOtp, onVerifyOtp: vi.fn().mockResolvedValue('t') })
+    );
+
+    await act(async () => {
+      await result.current.sendOtp('+15555550100');
+      await result.current.verifyOtp('123456');
+      await result.current.sendOtp('+15555550100');
+    });
+
+    expect(result.current.status).toBe('success');
+    expect(onSendOtp).toHaveBeenCalledTimes(1);
+  });
+
+  it('should allow sending immediately after reset() even if cooldown was active', async () => {
+    const onSendOtp = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      useAuthFlow({ strategy: 'otp', cooldownSeconds: 60, onSendOtp })
+    );
+
+    await act(async () => {
+      await result.current.sendOtp('+15555550100');
+    });
+    act(() => {
+      result.current.reset();
+    });
+    await act(async () => {
+      await result.current.sendOtp('+15555550199');
+    });
+
+    expect(onSendOtp).toHaveBeenCalledTimes(2);
+    expect(onSendOtp).toHaveBeenLastCalledWith('+15555550199');
+    expect(result.current.status).toBe('pending');
+  });
+
+  it('should fire onVerified once when the same magic link is delivered twice', () => {
+    __setExpoLinkingForTests({
+      parse: vi.fn().mockReturnValue({ path: 'auth', queryParams: { token: 'magic' } }),
+      addEventListener: vi.fn(),
+    });
+    const onVerified = vi.fn();
+    const { result } = renderHook(() => useAuthFlow({ strategy: 'deep-link', onVerified }));
+
+    act(() => {
+      result.current.handleDeepLink('myapp://auth?token=magic');
+      result.current.handleDeepLink('myapp://auth?token=magic');
+    });
+
+    expect(result.current.status).toBe('success');
+    expect(onVerified).toHaveBeenCalledTimes(1);
+  });
+
+  it('should treat a cancelled biometric prompt as a no-op, keeping a pending OTP flow', async () => {
+    __setExpoLocalAuthenticationForTests({
+      hasHardwareAsync: vi.fn().mockResolvedValue(true),
+      isEnrolledAsync: vi.fn().mockResolvedValue(true),
+      authenticateAsync: vi.fn().mockResolvedValue({ success: false, error: 'user_cancel' }),
+    });
+    const onError = vi.fn();
+    const { result } = renderHook(() =>
+      useAuthFlow({ onSendOtp: vi.fn().mockResolvedValue(undefined), onError })
+    );
+
+    await act(async () => {
+      await result.current.sendOtp('+15555550100');
+    });
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await result.current.authenticateWithBiometrics();
+    });
+
+    expect(ok).toBe(false);
+    expect(result.current.status).toBe('pending');
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('should only show one biometric prompt for concurrent calls', async () => {
+    let resolvePrompt: (r: { success: boolean }) => void;
+    const authenticateAsync = vi.fn().mockImplementation(
+      () => new Promise((resolve) => { resolvePrompt = resolve; })
+    );
+    __setExpoLocalAuthenticationForTests({
+      hasHardwareAsync: vi.fn().mockResolvedValue(true),
+      isEnrolledAsync: vi.fn().mockResolvedValue(true),
+      authenticateAsync,
+    });
+    const { result } = renderHook(() => useAuthFlow({ strategy: 'biometric' }));
+
+    let first: Promise<boolean>;
+    let second: boolean | undefined;
+    await act(async () => {
+      first = result.current.authenticateWithBiometrics();
+      second = await result.current.authenticateWithBiometrics();
+    });
+    await act(async () => {
+      resolvePrompt!({ success: true });
+      await first!;
+    });
+
+    expect(second).toBe(false);
+    expect(authenticateAsync).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBe('success');
+  });
+
   it('should reset to idle', async () => {
     const onSendOtp = vi.fn().mockResolvedValue(undefined);
 
