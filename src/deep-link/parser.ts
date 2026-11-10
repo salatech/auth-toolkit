@@ -63,6 +63,27 @@ export function parseAuthDeepLink(
 }
 
 /**
+ * Resolves the URL that launched the app (cold start), e.g. when the user taps a magic link
+ * in their email while the app is closed. `addDeepLinkListener` only sees links received while
+ * the app is already running, so call this once on startup as well.
+ *
+ * @returns The launch URL, or `null` if the app was opened normally.
+ *
+ * @example
+ * ```ts
+ * const url = await getInitialAuthDeepLink();
+ * if (url) handleDeepLink(url);
+ * ```
+ */
+export async function getInitialAuthDeepLink(): Promise<string | null> {
+  const LinkingModule = loadExpoLinking();
+  if (typeof LinkingModule.getInitialURL !== 'function') {
+    return null;
+  }
+  return (await LinkingModule.getInitialURL()) ?? null;
+}
+
+/**
  * Subscribes to incoming application URL events via lazy-loaded `expo-linking`.
  *
  * @param callback - Function invoked whenever an incoming deep link URL is received.

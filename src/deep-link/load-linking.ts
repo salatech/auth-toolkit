@@ -9,6 +9,8 @@ export type ExpoLinkingModule = {
     path?: string | null;
     queryParams?: Record<string, string | string[] | undefined>;
   };
+  /** Resolves the URL that cold-started the app, or `null` when it was opened normally. */
+  getInitialURL?: () => Promise<string | null>;
   /** Subscribes to incoming URL events. */
   addEventListener: (
     event: 'url',

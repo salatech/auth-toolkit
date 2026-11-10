@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __setExpoLinkingForTests,
   addDeepLinkListener,
+  getInitialAuthDeepLink,
   parseAuthDeepLink,
 } from '../deep-link/parser';
 
@@ -70,6 +71,18 @@ describe('Deep link module', () => {
 
     unsubscribe();
     expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('should resolve the cold-start URL, or null when unavailable', async () => {
+    const getInitialURL = vi.fn().mockResolvedValue('myapp://auth?token=cold');
+    __setExpoLinkingForTests({ parse, addEventListener, getInitialURL });
+    await expect(getInitialAuthDeepLink()).resolves.toBe('myapp://auth?token=cold');
+
+    getInitialURL.mockResolvedValue(null);
+    await expect(getInitialAuthDeepLink()).resolves.toBeNull();
+
+    __setExpoLinkingForTests({ parse, addEventListener });
+    await expect(getInitialAuthDeepLink()).resolves.toBeNull();
   });
 
   it('should throw a clear error when expo-linking is unavailable', () => {
