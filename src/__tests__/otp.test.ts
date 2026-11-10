@@ -2,6 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthStateMachine } from '../core/state-machine';
 import { OtpManager } from '../otp/otp-manager';
 
+describe('OtpManager.resetCooldown', () => {
+  it('should allow resending immediately after resetCooldown()', () => {
+    const manager = new OtpManager(new AuthStateMachine(), { cooldownSeconds: 30 });
+    manager.startCooldown();
+    expect(manager.canResend()).toBe(false);
+    manager.resetCooldown();
+    expect(manager.canResend()).toBe(true);
+    expect(manager.getRemainingCooldown()).toBe(0);
+  });
+});
+
 describe('OtpManager', () => {
   beforeEach(() => {
     vi.useFakeTimers();

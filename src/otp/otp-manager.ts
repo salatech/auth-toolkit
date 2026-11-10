@@ -71,6 +71,43 @@ export class OtpManager<TData = unknown, TError = Error> {
   }
 
   /**
+   * Updates code length and/or cooldown duration on a live manager. An active cooldown keeps
+   * its original end time; the new duration applies from the next `startCooldown()`.
+   *
+   * @param options - Values to change; omitted fields keep their current value.
+   * @returns Nothing.
+   *
+   * @example
+   * ```ts
+   * manager.configure({ codeLength: 4 });
+   * manager.isValidCode('1234'); // true
+   * ```
+   */
+  public configure(options: OtpManagerOptions): void {
+    if (options.cooldownSeconds !== undefined) {
+      this.cooldownSeconds = Math.max(0, options.cooldownSeconds);
+    }
+    if (options.codeLength !== undefined) {
+      this.codeLength = Math.max(1, options.codeLength);
+    }
+  }
+
+  /**
+   * Clears any active resend cooldown so a new code can be sent immediately.
+   *
+   * @returns Nothing.
+   *
+   * @example
+   * ```ts
+   * manager.resetCooldown();
+   * manager.canResend(); // true
+   * ```
+   */
+  public resetCooldown(): void {
+    this.cooldownEndTime = null;
+  }
+
+  /**
    * Returns the number of seconds remaining before resending is permitted (rounded up).
    */
   public getRemainingCooldown(): number {
