@@ -70,6 +70,8 @@ function getExpoLocalAuthentication(): ExpoLocalAuthenticationModule {
  * Determines whether biometric hardware is present and user credentials are enrolled on the device.
  *
  * @returns Resolves to `true` if Face ID, Touch ID, or Android Biometric Prompt is ready.
+ * Resolves to `false` (does not throw) when `expo-local-authentication` is not installed,
+ * e.g. on web, so it is safe to use for showing or hiding a biometric button.
  *
  * @example
  * ```ts
@@ -80,7 +82,15 @@ function getExpoLocalAuthentication(): ExpoLocalAuthenticationModule {
  * ```
  */
 export async function isBiometricAvailable(): Promise<boolean> {
-  const LocalAuth = getExpoLocalAuthentication();
+  let LocalAuth: ExpoLocalAuthenticationModule;
+  try {
+    LocalAuth = getExpoLocalAuthentication();
+  } catch (err) {
+    if (err instanceof AuthError && err.code === 'MISSING_DEPENDENCY') {
+      return false;
+    }
+    throw err;
+  }
   const hasHardware = await LocalAuth.hasHardwareAsync();
   const isEnrolled = await LocalAuth.isEnrolledAsync();
   return hasHardware && isEnrolled;
