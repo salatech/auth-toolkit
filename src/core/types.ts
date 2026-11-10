@@ -57,6 +57,9 @@ export type AuthStateMachineListener<TData = unknown, TError = Error> = (
 
 /**
  * Stable machine-readable error codes thrown by `@salatech/auth-toolkit`.
+ *
+ * `COOLDOWN_ACTIVE` and `STRATEGY_DISABLED` are reserved for future use: the hooks currently
+ * treat those situations as silent no-ops (see `resendIn` and the dev-mode warning) rather than errors.
  */
 export type AuthErrorCode =
   | 'INVALID_CODE'
