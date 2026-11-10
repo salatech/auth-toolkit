@@ -22,6 +22,8 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  treeshake: true,
+  // Rollup tree-shaking rewrites `require('expo-linking')` into an opaque
+  // `__require(...)` shim that Metro cannot resolve, so it must stay off.
+  treeshake: false,
   external,
 });

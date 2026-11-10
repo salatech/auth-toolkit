@@ -1,6 +1,21 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('Built Package Entry Points Smoke Test', () => {
+  it('should keep literal require() calls for optional peers so Metro can resolve them', () => {
+    const cjs = readFileSync(resolve(__dirname, '../../dist/index.js'), 'utf8');
+    for (const peer of ['expo-linking', 'expo-local-authentication', 'react-native']) {
+      expect(cjs).toMatch(new RegExp(`(?<!_)require\\("${peer}"\\)`));
+    }
+
+    const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf8'));
+    expect(pkg['react-native']).toBe('./dist/index.js');
+    for (const entry of Object.values(pkg.exports) as Array<Record<string, string>>) {
+      expect(entry['react-native']).toMatch(/\.js$/);
+    }
+  });
+
   it('should import all subpaths in CommonJS without throwing', () => {
     /* eslint-disable @typescript-eslint/no-var-requires */
     const root = require('../../dist/index.js');
