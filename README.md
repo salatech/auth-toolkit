@@ -215,7 +215,17 @@ When an entered OTP code is incorrect, the state machine dispatches `VERIFY_FAIL
 Calling `sendOtp()` while cooldown is active (`resendIn > 0`) is a no-op.
 - Always disable your resend button in the UI: `disabled={resendIn > 0}`.
 
-### 5. Double Submissions
+### 5. Missing Magic Links When the App Was Closed
+`addDeepLinkListener` only fires for links received while the app is running. Also handle the launch link:
+```tsx
+useEffect(() => {
+  getInitialAuthDeepLink().then((url) => url && handleDeepLink(url));
+  return addDeepLinkListener(handleDeepLink);
+}, [handleDeepLink]);
+```
+Links without a token are reported through `onError` but do not change the auth state, so it is safe to forward every incoming URL.
+
+### 6. Double Submissions
 `sendOtp`, `verifyOtp`, and `authenticateWithBiometrics` automatically guard against concurrent double-submits while requests are in flight.
 
 ---
@@ -275,6 +285,7 @@ import {
   AuthError,
   parseAuthDeepLink,
   addDeepLinkListener,
+  getInitialAuthDeepLink,
   isBiometricAvailable,
   authenticateBiometric,
 } from '@salatech/auth-toolkit';
@@ -387,6 +398,7 @@ export type AuthErrorCode =
   | 'MISSING_DEPENDENCY'
   | 'NO_HANDLER'
   | 'AUTH_FAILED';
+// COOLDOWN_ACTIVE and STRATEGY_DISABLED are reserved; the hooks currently no-op in those cases.
 ```
 
 ---
@@ -394,8 +406,9 @@ export type AuthErrorCode =
 ### Deep Link & Biometric Utilities
 
 - `parseAuthDeepLink(url: string, tokenParamName?: string): DeepLinkParseResult`
-- `addDeepLinkListener(callback: (url: string) => void): () => void`
-- `isBiometricAvailable(): Promise<boolean>`
+- `addDeepLinkListener(callback: (url: string) => void): () => void` (links received while the app is running)
+- `getInitialAuthDeepLink(): Promise<string | null>` (the link that cold-started the app; call once on startup)
+- `isBiometricAvailable(): Promise<boolean>` (resolves `false` when `expo-local-authentication` is not installed)
 - `authenticateBiometric(options?: BiometricOptions): Promise<BiometricResult>`
 
 ---

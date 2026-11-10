@@ -38,7 +38,7 @@ export function Login() {
   });
 
   if (status === 'idle') return <Button title="Send Code" onPress={() => sendOtp(phone)} />;
-  if (status === 'pending') return (
+  if (status === 'pending' || status === 'verifying') return (
     <View>
       <OtpInputNative value={code} onChange={setCode} onEditStart={clearError} onComplete={verifyOtp} />
       <Button title={resendIn > 0 ? `Resend (${resendIn}s)` : 'Resend'} disabled={resendIn > 0} onPress={() => sendOtp(phone)} />
@@ -58,7 +58,7 @@ The authentication state follows a deterministic finite state machine (`AuthStat
   - On wrong code: dispatches `VERIFY_FAILURE` -> transitions back to `pending` with `state.error` set. The user can retry without starting over.
   - While `pending`, typing dispatches `CLEAR_ERROR` -> clears `state.error` while keeping `status: 'pending'`.
 - `error`: Terminal failure (e.g. fatal network crash). Dispatched via `SET_ERROR`. Exits via `RESET`.
-- `reset`: Calling `reset()` dispatches `RESET` from any state -> returns to `idle`.
+- `reset`: Calling `reset()` dispatches `RESET` from any state -> returns to `idle`, clears the resend cooldown, and discards results of requests still in flight.
 - Direct login: Deep links (`handleDeepLink`) and biometrics (`authenticateWithBiometrics`) can transition directly to `success` from `idle` or `pending`.
 
 ## Common Mistakes & How to Avoid Them
@@ -76,5 +76,8 @@ The authentication state follows a deterministic finite state machine (`AuthStat
    Wire `onEditStart={clearError}` on your `OtpInput`/`OtpInputNative` so the error message clears when the user types.
 4. Calling `sendOtp()` during Cooldown:
    `sendOtp()` is a no-op while `resendIn > 0`. Disable your resend button when `resendIn > 0`.
-5. Double Submissions:
-   The library automatically guards `sendOtp` and `verifyOtp` against duplicate concurrent submissions while requests are in flight.
+5. Missing Cold-Start Magic Links:
+   `addDeepLinkListener` misses the link that launched the app. Also call `getInitialAuthDeepLink()` once on startup and pass the result to `handleDeepLink`.
+   Links without a token call `onError` but do not change the auth state.
+6. Double Submissions:
+   The library automatically guards `sendOtp`, `verifyOtp`, and `authenticateWithBiometrics` against duplicate concurrent submissions while requests are in flight. `onVerified` fires at most once per flow, even if the same magic link is delivered twice.
