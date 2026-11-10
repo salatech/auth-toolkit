@@ -39,7 +39,15 @@ export function applyDigitsAt(
   incoming: string,
   length: number
 ): { next: string; focusIndex: number } {
-  const cleaned = onlyDigits(incoming);
+  let cleaned = onlyDigits(incoming);
+
+  // Typing into an already-filled box yields the old digit plus the new one
+  // (e.g. '1' + '9' -> '19'); treat that as replacing the box, not a paste.
+  const existing = value[index];
+  if (cleaned.length === 2 && existing && /\d/.test(existing)) {
+    if (cleaned[0] === existing) cleaned = cleaned[1];
+    else if (cleaned[1] === existing) cleaned = cleaned[0];
+  }
 
   if (!cleaned) {
     return {

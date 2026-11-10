@@ -23,6 +23,12 @@ describe('otp-input-logic', () => {
     expect(result.focusIndex).toBe(5);
   });
 
+  it('should replace a filled box when typing over it without wiping later digits', () => {
+    expect(applyDigitsAt('123456', 0, '19', 6)).toEqual({ next: '923456', focusIndex: 1 });
+    expect(applyDigitsAt('123456', 2, '93', 6)).toEqual({ next: '129456', focusIndex: 3 });
+    expect(applyDigitsAt('123456', 1, '22', 6)).toEqual({ next: '123456', focusIndex: 2 });
+  });
+
   it('should clear a digit when input is empty', () => {
     const result = applyDigitsAt('123', 1, '', 6);
     expect(result.next).toBe('13');
