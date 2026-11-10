@@ -118,11 +118,16 @@ export const OtpInputNative: React.FC<OtpInputNativeProps> = ({
     [length]
   );
 
+  const valueLengthRef = useRef(value.length);
+  valueLengthRef.current = value.length;
+
+  // Only on mount / re-enable: re-running on every keystroke would steal focus
+  // from the box the user is editing.
   useEffect(() => {
     if (!autoFocus || disabled) return;
-    const firstEmpty = Math.min(value.length, length - 1);
+    const firstEmpty = Math.min(valueLengthRef.current, length - 1);
     inputRefs.current[firstEmpty]?.focus();
-  }, [autoFocus, disabled, length, value.length]);
+  }, [autoFocus, disabled, length]);
 
   const handleChange = useCallback(
     (index: number, raw: string) => {
