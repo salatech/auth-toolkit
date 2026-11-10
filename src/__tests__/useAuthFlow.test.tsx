@@ -453,6 +453,51 @@ describe('useAuthFlow', () => {
     expect(result.current.status).toBe('success');
   });
 
+  it('should report a tokenless link via onError without derailing a pending flow', async () => {
+    __setExpoLinkingForTests({
+      parse: vi.fn().mockReturnValue({ path: 'settings', queryParams: {} }),
+      addEventListener: vi.fn(),
+    });
+    const onError = vi.fn();
+    const { result } = renderHook(() =>
+      useAuthFlow({ onSendOtp: vi.fn().mockResolvedValue(undefined), onError })
+    );
+
+    await act(async () => {
+      await result.current.sendOtp('+15555550100');
+    });
+    act(() => {
+      result.current.handleDeepLink('myapp://settings');
+    });
+
+    expect(result.current.status).toBe('pending');
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it('should apply codeLength changes after the first render', async () => {
+    const onVerifyOtp = vi.fn().mockResolvedValue('t');
+    const { result, rerender } = renderHook(
+      ({ codeLength }) =>
+        useAuthFlow({
+          strategy: 'otp',
+          codeLength,
+          cooldownSeconds: 0,
+          onSendOtp: vi.fn().mockResolvedValue(undefined),
+          onVerifyOtp,
+        }),
+      { initialProps: { codeLength: 6 } }
+    );
+
+    rerender({ codeLength: 4 });
+    await act(async () => {
+      await result.current.sendOtp('+15555550100');
+      await result.current.verifyOtp('1234');
+    });
+
+    expect(onVerifyOtp).toHaveBeenCalledWith('1234');
+    expect(result.current.status).toBe('success');
+  });
+
   it('should reset to idle', async () => {
     const onSendOtp = vi.fn().mockResolvedValue(undefined);
 

@@ -156,6 +156,9 @@ export function useAuthFlow<TToken = string>(
     })
   );
 
+  // The manager is created once; keep it in sync if the caller changes these options.
+  otpManagerRef.current.configure({ cooldownSeconds, codeLength });
+
   const [state, setState] = useState<AuthState<TToken, Error>>(
     machineRef.current.getState()
   );
@@ -318,13 +321,13 @@ export function useAuthFlow<TToken = string>(
             callbacksRef.current.onVerified?.(token);
           }
         } else {
+          // Apps often forward every incoming link here, so an unrelated link must not
+          // derail an in-progress flow: report it, but leave the state untouched.
           const err = new AuthError(
             `No token parameter found in deep link URL: '${url}'. Verify that the link contains '?${tokenParamName}=...'.`,
             'AUTH_FAILED'
           );
-          if (transition({ type: 'SET_ERROR', payload: err })) {
-            callbacksRef.current.onError?.(err);
-          }
+          callbacksRef.current.onError?.(err);
         }
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
